@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web to CSV Extractor with Gemini</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            background-color: #f8f9fa;
+            color: #212529;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        h1, h2 {
+            color: #343a40;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }
+        .input-group, .link-entry {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .input-group label {
+            font-weight: bold;
+            flex-basis: 150px;
+        }
+        input[type="text"], input[type="url"], input[type="password"] {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-primary { background-color: #007bff; }
+        .btn-primary:hover { background-color: #0056b3; }
+        .btn-secondary { background-color: #6c757d; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        .btn-danger { background-color: #dc3545; padding: 5px 10px; font-size: 14px; }
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-success { background-color: #28a745; }
+        .btn-success:hover { background-color: #218838; }
+        #results { margin-top: 25px; }
+        .result-card {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .result-card h3 { margin-top: 0; }
+        .result-card pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .spinner {
+            border: 4px solid rgba(0,0,0,0.1);
+            border-left-color: #007bff;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .alert-info { color: #0c5460; background-color: #d1ecf1; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Web Content to CSV Extractor</h1>
+        
+        <div class="input-group">
+            <label for="apiKey">Gemini API Key:</label>
+            <input type="password" id="apiKey" placeholder="Enter your Gemini API Key">
+        </div>
+
+        <div class="alert alert-info">
+            <strong>Note:</strong> This tool uses a public CORS proxy to fetch website content. This is for demonstration purposes and may have limitations.
+            <p>Gemini API Key: AIzaSyCp4HAXR0R9hkZgimitLhQhUNucN53FWDk</p>
+        </div>
+
+        <h2>Links to Process</h2>
+        <div id="links-container">
+            <div class="link-entry">
+                <input type="url" class="url-input" placeholder="https://example.com/contacts" value="https://kaushalya.mahaswayam.gov.in/users/mssds_directory">
+                <input type="text" class="filename-input" placeholder="Desired CSV Filename" value="MSSDS_Contacts.csv">
+                <button class="btn-danger remove-link-btn">Remove</button>
+            </div>
+        </div>
+        <button id="add-link-btn" class="btn-secondary">Add Another Link</button>
+        <hr style="margin: 20px 0;">
+        <button id="generate-btn" class="btn-primary">Generate CSVs</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const apiKeyInput = document.getElementById('apiKey');
+        const linksContainer = document.getElementById('links-container');
+        const addLinkBtn = document.getElementById('add-link-btn');
+        const generateBtn = document.getElementById('generate-btn');
+        const resultsDiv = document.getElementById('results');
+
+        // --- Event Listeners ---
+        addLinkBtn.addEventListener('click', addLinkEntry);
+        generateBtn.addEventListener('click', handleGeneration);
+        linksContainer.addEventListener('click', handleRemoveLink);
+        resultsDiv.addEventListener('click', handleDownload);
+
+
+        // --- Functions ---
+
+        function addLinkEntry() {
+            const entryDiv = document.createElement('div');
+            entryDiv.className = 'link-entry';
+            entryDiv.innerHTML = `
+                <input type="url" class="url-input" placeholder="https://example.com/another-page">
+                <input type="text" class="filename-input" placeholder="another_file.csv">
+                <button class="btn-danger remove-link-btn">Remove</button>
+            `;
+            linksContainer.appendChild(entryDiv);
+        }
+
+        function handleRemoveLink(event) {
+            if (event.target.classList.contains('remove-link-btn')) {
+                event.target.closest('.link-entry').remove();
+            }
+        }
+
+        function handleDownload(event) {
+            if (event.target.classList.contains('download-btn')) {
+                const csvContent = event.target.dataset.csv;
+                const filename = event.target.dataset.filename;
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+        
+        async function handleGeneration() {
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                alert('Please enter your Gemini API Key.');
+                return;
+            }
+
+            const linkEntries = linksContainer.querySelectorAll('.link-entry');
+            if (linkEntries.length === 0) {
+                alert('Please add at least one link to process.');
+                return;
+            }
+
+            resultsDiv.innerHTML = '<div class="spinner"></div><p style="text-align:center;">Processing... This may take a moment.</p>';
+            generateBtn.disabled = true;
+
+            const processingPromises = [];
+            linkEntries.forEach(entry => {
+                const urlInput = entry.querySelector('.url-input');
+                const filenameInput = entry.querySelector('.filename-input');
+                const url = urlInput.value.trim();
+                const filename = filenameInput.value.trim() || 'download.csv';
+                
+                if (url) {
+                    processingPromises.push(processSingleLink(url, filename, apiKey));
+                }
+            });
+            
+            // Wait for all links to be processed
+            const allResults = await Promise.all(processingPromises);
+            
+            // Clear spinner and display results
+            resultsDiv.innerHTML = '';
+            allResults.forEach(resultHtml => {
+                resultsDiv.innerHTML += resultHtml;
+            });
+
+            generateBtn.disabled = false;
+        }
+
+        async function processSingleLink(url, filename, apiKey) {
+            try {
+                // 1. Fetch content from the URL via a CORS proxy
+                const contentText = await getFullPageContent(url);
+                if (contentText.startsWith('Error')) {
+                    throw new Error(contentText);
+                }
+
+                // 2. Call Gemini API to extract and format data
+                const geminiPrompt = createGeminiPrompt(contentText);
+                const csvData = await callGeminiApi(geminiPrompt, apiKey);
+
+                // 3. Create the result card with a download button
+                return createResultCard(filename, csvData, 'success');
+            } catch (error) {
+                console.error(`Error processing ${url}:`, error);
+                return createResultCard(filename, `Failed to process ${url}. Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function getFullPageContent(url) {
+            // --- THIS IS THE ONLY PART YOU CHANGE ---
+            // Paste the Web App URL you copied from Google Apps Script here.
+            const myProxyUrl = 'https://script.google.com/macros/s/AKfycbwjMmvU0ahMY7CtpXw1w8-lZN26LlworWw2HNURx7B0_aXNZwP9eQ-0Cn3nGI50G8zbeQ/exec'; 
+            
+            try {
+                // We pass the target URL as a parameter to our new proxy
+                const response = await fetch(`${myProxyUrl}?url=${encodeURIComponent(url)}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Your proxy returned an error! Status: ${response.status}`);
+                }
+                
+                const data = await response.json(); // Our proxy returns JSON
+                
+                if (data.error) {
+                    throw new Error(`Error from proxy: ${data.error}`);
+                }
+                
+                if (data.content.startsWith('Error:')) {
+                    throw new Error(data.content);
+                }
+
+                return data.content; // Return the clean text
+            } catch (e) {
+                // Return the error message to be displayed in the UI
+                return `Error fetching via proxy: ${e.message}`;
+            }
+        }
+        
+        function createGeminiPrompt(textContent) {
+            // This is the highly specific prompt from our previous conversation
+            return `
+                Act as a data extraction expert. Based on the text provided below, extract the contact information for each official listed.
+                Your output must be ONLY in CSV format with a header row. Do not add any introductory text, explanations, or code formatting like \`\`\`csv.
+
+                The required CSV columns are exactly:
+                Name / Designation,Section / Department,Name of the Organisation,Email ID 1,Email ID 2,Phone 1,Phone 2,Fax,Address,Notes
+
+                Follow these rules with the highest priority:
+                1. Handle Empty Cells: If any data for a cell (like Fax, Address, Email ID 2) is not found in the source text, you MUST fill that cell with the text 'NA'.
+                2. Handle Phone Numbers: This is a critical rule. A pattern like "022 22625651 / 53" represents two full phone numbers: "022 22625651" and "022 22625653". You must expand this for every entry.
+                   - Place the first number ("022 22625651") into the 'Phone 1' column.
+                   - Place the second, expanded number ("022 22625653") into the 'Phone 2' column.
+                3. Handle Extension Numbers: If a separate extension number (like "102") is present, place it in the 'Notes' column, formatted as "Ext: 102". If no other notes, this is the only content.
+                4. Combine Name/Designation: Combine the Name and Designation into the "Name / Designation" column, separated by " / ".
+                5. Organisation Name: The "Name of the Organisation" is "Maharashtra State Skill Development Society" for all relevant entries. Infer if another organization is mentioned.
+                6. Infer Department: The "Section / Department" should be inferred from the designation (e.g., "Chief Executive Office" for CEO, "Finance" for Finance Officer).
+                7. Fix Emails: Correct emails by replacing '[at]' with '@' and '[dot]' with '.'.
+
+                Here is the text to process:
+                ---
+                ${textContent}
+                ---
+            `;
+        }
+        
+        async function callGeminiApi(prompt, apiKey) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+            
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    "contents": [{ "parts": [{ "text": prompt }] }]
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`Gemini API Error: ${errorData.error.message}`);
+            }
+
+            const data = await response.json();
+            // Clean up the response to ensure it's raw CSV
+            let csvText = data.candidates[0].content.parts[0].text.trim();
+            if (csvText.startsWith("```csv")) {
+                csvText = csvText.substring(5).trim();
+            }
+            if (csvText.endsWith("```")) {
+                csvText = csvText.slice(0, -3).trim();
+            }
+            return csvText;
+        }
+
+        function createResultCard(filename, content, type) {
+            if (type === 'success') {
+                const previewContent = content.split('\n').slice(0, 5).join('\n'); // Show first 5 lines as preview
+                return `
+                    <div class="result-card">
+                        <h3>${filename}</h3>
+                        <p><strong>Status:</strong> Success!</p>
+                        <strong>Preview:</strong>
+                        <pre>${previewContent}</pre>
+                        <button class="btn-success download-btn" data-csv="${encodeURIComponent(content)}" data-filename="${filename}">Download ${filename}</button>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="result-card" style="background-color: #f8d7da; border-color: #f5c6cb;">
+                        <h3>${filename}</h3>
+                        <p><strong>Status:</strong> Failed</p>
+                        <pre>${content}</pre>
+                    </div>
+                `;
+            }
+        }
+        // This is a workaround for the download button's data attribute which has issues with raw newlines.
+        // We URI encode the data and decode it on download.
+        function handleDownload(event) {
+            if (event.target.classList.contains('download-btn')) {
+                const csvContent = decodeURIComponent(event.target.dataset.csv);
+                const filename = event.target.dataset.filename;
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+    </script>
+</body>
+</html>
