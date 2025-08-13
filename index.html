@@ -273,27 +273,59 @@
         function createGeminiPrompt(textContent) {
             // This is the highly specific prompt from our previous conversation
             return `
-                Act as a data extraction expert. Based on the text provided below, extract the contact information for each official listed.
-                Your output must be ONLY in CSV format with a header row. Do not add any introductory text, explanations, or code formatting like \`\`\`csv.
-
+                Act as a meticulous data extraction expert. Your task is to extract contact information from the provided text and format it into a CSV.
+                
                 The required CSV columns are exactly:
                 Name / Designation,Section / Department,Name of the Organisation,Email ID 1,Email ID 2,Phone 1,Phone 2,Fax,Address,Notes
-
-                Follow these rules with the highest priority:
-                1. Handle Empty Cells: If any data for a cell (like Fax, Address, Email ID 2) is not found in the source text, you MUST fill that cell with the text 'NA'.
-                2. Handle Phone Numbers: This is a critical rule. A pattern like "022 22625651 / 53" represents two full phone numbers: "022 22625651" and "022 22625653". You must expand this for every entry.
-                   - Place the first number ("022 22625651") into the 'Phone 1' column.
-                   - Place the second, expanded number ("022 22625653") into the 'Phone 2' column.
-                3. Handle Extension Numbers: If a separate extension number (like "102") is present, place it in the 'Notes' column, formatted as "Ext: 102". If no other notes, this is the only content.
-                4. Combine Name/Designation: Combine the Name and Designation into the "Name / Designation" column, separated by " / ".
-                5. Organisation Name: The "Name of the Organisation" is "Maharashtra State Skill Development Society" for all relevant entries. Infer if another organization is mentioned.
-                6. Infer Department: The "Section / Department" should be inferred from the designation (e.g., "Chief Executive Office" for CEO, "Finance" for Finance Officer).
-                7. Fix Emails: Correct emails by replacing '[at]' with '@' and '[dot]' with '.'.
-
-                Here is the text to process:
+                
+                You must follow these two parts in order:
+                
                 ---
+                **Part 1: Extract General/Office Contacts**
+                
+                First, scan the entire text for general contact information not listed in the main employee table. Create separate rows for these.
+                
+                1.  **Registered Office:** Create one row for the "REGISTERED OFFICE ADDRESS".
+                    -   **Name / Designation:** "Directorate of Higher Education / Registered Office"
+                    -   **Address:** "Directorate of Higher Education, Himachal Pradesh - Shimla-171001"
+                    -   **Phone 1/2:** Extract from the "Phone" and "PBX" fields.
+                    -   **Fax:** Extract from the "Fax" field.
+                    -   **Email ID 1:** Extract the general email (`dhe-sml-hp@gov.in`).
+                
+                2.  **Web Information Manager:** Create a separate row for the "Web Information Manager".
+                    -   **Name / Designation:** "Dr. Amarjeet K Sharma / Web Information Manager"
+                    -   **Phone 1:** Extract the mobile number provided for this role.
+                    -   **Email ID 1:** Extract the email provided for this role.
+                
+                ---
+                **Part 2: Extract Individual Contacts from the Table**
+                
+                Next, process the main table of individuals row by row, applying these strict rules:
+                
+                1.  **PHONE NUMBER PRIORITY (Most Important Rule):**
+                    -   The `Tel/Mob. No.` column contains the most important numbers. **You must prioritize these 10-digit mobile numbers.**
+                    -   If one or more 10-digit numbers exist in the `Tel/Mob. No.` column, place the first one in `Phone 1` and the second one (if present) in `Phone 2`.
+                    -   If you use a mobile number, the shorter number from the `Tele. No. (O)` column should then be placed in the `Notes` column, like this: "Office Tel: 2656621".
+                
+                2.  **NOTES COLUMN:**
+                    -   Combine all extra information into the `Notes` column, separated by commas. This includes "Office Tel" (from the rule above) and the extension number from the `Office Ext. No.` column (e.g., "Ext: 201").
+                    -   A complete example for the first row would be: "Office Tel: 2656621, Ext: 201".
+                    -   If an extension is `---` or blank, ignore it.
+                
+                3.  **FAX NUMBERS:** If a number in the `Tele. No. (O)` column is explicitly prefixed with `FAX:`, place that number ONLY in the `Fax` column.
+                
+                4.  **EMPTY CELLS:** If any data for a cell is not found (e.g., no second mobile number, no fax), you MUST fill that cell with the text `NA`.
+                
+                5.  **ORGANIZATION & ADDRESS:**
+                    -   The `Name of the Organisation` for all individuals is "Directorate of Higher Education Shimla".
+                    -   The `Address` for all individuals is "Himachal Pradesh, Shimla-171001".
+                
+                6.  **EMAIL:** Clean up emails by replacing `[at]` with `@` and `[dash]` with `-`.
+                
+                ---
+                Now, process the following text and generate ONLY the CSV data:
+                
                 ${textContent}
-                ---
             `;
         }
         
